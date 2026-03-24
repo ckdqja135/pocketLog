@@ -1,0 +1,40 @@
+{
+  "name": "pokelog",
+  "version": "1.0.0",
+  "description": "개발자의 Git 커밋 활동으로 포켓몬을 수집하는 CLI 도구",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "pokelog": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "keywords": [
+    "pokemon",
+    "git",
+    "cli",
+    "developer-tools"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "chalk": "^4.1.2",
+    "figlet": "^1.8.0",
+    "got": "^14.6.6",
+    "inquirer": "^8.2.6",
+    "node-cron": "^3.0.3",
+    "terminal-image": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/figlet": "^1.7.0",
+    "@types/inquirer": "^8.2.10",
+    "@types/node": "^20.11.0",
+    "@types/node-cron": "^3.0.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
