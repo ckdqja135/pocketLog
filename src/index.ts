@@ -13,16 +13,36 @@ import { configCommand } from './commands/config.js';
 import { helpCommand } from './commands/help.js';
 
 let expiryTimer: ReturnType<typeof setInterval> | null = null;
+let rl: readline.Interface;
+
+// inquirer 사용 명령어 실행 전 readline을 닫고, 끝나면 다시 열어야 충돌 방지
+function closeRl(): void {
+  if (rl) {
+    rl.close();
+  }
+}
+
+function createRl(): readline.Interface {
+  rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return rl;
+}
 
 async function handleCommand(input: string): Promise<boolean> {
   const cmd = input.trim().toLowerCase();
 
   switch (cmd) {
     case 'encounter':
+      closeRl();
       await encounterCommand();
+      createRl();
       break;
     case 'catch':
+      closeRl();
       await catchCommand();
+      createRl();
       break;
     case 'bag':
       await bagCommand();
@@ -31,7 +51,9 @@ async function handleCommand(input: string): Promise<boolean> {
       await statusCommand();
       break;
     case 'config':
+      closeRl();
       await configCommand();
+      createRl();
       break;
     case 'help':
       helpCommand();
@@ -73,10 +95,7 @@ async function main(): Promise<void> {
   }
 
   // REPL 루프
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
+  createRl();
 
   const promptUser = (): void => {
     rl.question(getPrompt(), async (input) => {
