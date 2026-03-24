@@ -13,6 +13,7 @@ export interface Encounter {
   expires_at: string;
   commit_sha: string;
   caught: number; // 0: 대기, 1: 포획, 2: 도망
+  rarity: string;
 }
 
 export interface CaughtPokemon {
@@ -22,6 +23,7 @@ export interface CaughtPokemon {
   level: number;
   caught_at: string;
   commit_sha: string;
+  rarity: string;
 }
 
 export interface PokemonInfo {
@@ -29,7 +31,12 @@ export interface PokemonInfo {
   name: string;
   koreanName: string;
   spriteUrl: string;
+  rarity: Rarity;
+  evolutionChainId?: number;
+  evolvesTo?: number; // 진화 후 pokemon_id
 }
+
+export type Rarity = 'common' | 'uncommon' | 'rare' | 'legendary' | 'mythical';
 
 export interface GitHubCommit {
   sha: string;
@@ -50,4 +57,19 @@ export interface GitHubCommit {
 export interface AppConfig {
   githubToken: string;
   repos: string[]; // "owner/repo" 형식
+}
+
+export interface BallType {
+  name: string;
+  icon: string;
+  bonus: number;
+  requiredCommits: number;
+}
+
+export interface Badge {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  unlockedAt?: string;
 }

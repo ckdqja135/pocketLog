@@ -2,6 +2,8 @@ import chalk from 'chalk';
 import inquirer from 'inquirer';
 import { getActiveEncounters, expireEncounters } from '../services/database.js';
 import { formatTimeRemaining } from '../ui/display.js';
+import { RARITY_CONFIG } from '../services/pokemon.js';
+import type { Rarity } from '../types/index.js';
 
 export async function encounterCommand(): Promise<number | null> {
   // 먼저 만료된 것들 처리
@@ -20,10 +22,15 @@ export async function encounterCommand(): Promise<number | null> {
 
   console.log(chalk.yellow(`\n  🌿 야생 포켓몬 ${encounters.length}마리 발견!\n`));
 
-  const choices = encounters.map((enc) => ({
-    name: `야생 ${chalk.bold(enc.pokemon_name)} Lv.${enc.level}  (남은 시간: ${formatTimeRemaining(enc.expires_at)})`,
-    value: enc.id,
-  }));
+  const choices = encounters.map((enc) => {
+    const rarity = (enc.rarity || 'common') as Rarity;
+    const rarityInfo = RARITY_CONFIG[rarity];
+    const rarityTag = rarity !== 'common' ? ` ${rarityInfo.icon}${chalk.hex(rarityInfo.color)(`[${rarityInfo.label}]`)}` : '';
+    return {
+      name: `야생 ${chalk.bold(enc.pokemon_name)} Lv.${enc.level}${rarityTag}  (남은 시간: ${formatTimeRemaining(enc.expires_at)})`,
+      value: enc.id,
+    };
+  });
 
   choices.push({
     name: chalk.gray('← 돌아가기'),

@@ -7,7 +7,7 @@ import {
   markCommitProcessed,
   addEncounter,
 } from './database.js';
-import { getRandomPokemonId, getPokemonInfo, calculateLevel } from './pokemon.js';
+import { getRandomPokemonId, getPokemonInfo, calculateLevel, RARITY_CONFIG } from './pokemon.js';
 
 let pollingTimer: ReturnType<typeof setInterval> | null = null;
 let isFirstPoll = true;
@@ -116,10 +116,15 @@ async function processNewCommits(): Promise<void> {
 
       const expiresAt = new Date(Date.now() + 70 * 60 * 1000).toISOString();
 
-      addEncounter(pokemonInfo.id, pokemonInfo.koreanName, level, expiresAt, commit.sha);
+      addEncounter(pokemonInfo.id, pokemonInfo.koreanName, level, expiresAt, commit.sha, pokemonInfo.rarity);
+
+      const rarityInfo = RARITY_CONFIG[pokemonInfo.rarity];
+      const rarityTag = pokemonInfo.rarity !== 'common'
+        ? chalk.hex(rarityInfo.color)(` [${rarityInfo.icon} ${rarityInfo.label}]`)
+        : '';
 
       console.log(
-        chalk.yellow(`\n🌿 야생의 ${chalk.bold(pokemonInfo.koreanName)} Lv.${level} 이(가) 나타났다!`)
+        chalk.yellow(`\n🌿 야생의 ${chalk.bold(pokemonInfo.koreanName)} Lv.${level} 이(가) 나타났다!`) + rarityTag
       );
       console.log(chalk.gray(`   (커밋: ${commit.sha.slice(0, 7)} by ${authorName})`));
       console.log(chalk.cyan('   → catch 를 입력하여 포획하세요!'));
@@ -152,11 +157,12 @@ export function startPolling(): void {
     isFirstPoll = false;
   });
 
+  const intervalMin = parseInt(getConfig('poll_interval') || '5') || 5;
   pollingTimer = setInterval(() => {
     processNewCommits().catch(() => {});
-  }, 5 * 60 * 1000);
+  }, intervalMin * 60 * 1000);
 
-  console.log(chalk.green('📡 GitHub 폴링을 시작합니다. (5분 간격)'));
+  console.log(chalk.green(`📡 GitHub 폴링을 시작합니다. (${intervalMin}분 간격)`));
 }
 
 export function stopPolling(): void {

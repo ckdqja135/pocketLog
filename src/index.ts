@@ -8,14 +8,18 @@ import { startPolling, stopPolling } from './services/poller.js';
 import { encounterCommand } from './commands/encounter.js';
 import { catchCommand } from './commands/catch.js';
 import { bagCommand } from './commands/bag.js';
-import { statusCommand } from './commands/status.js';
+import { statsCommand } from './commands/stats.js';
 import { configCommand } from './commands/config.js';
 import { helpCommand } from './commands/help.js';
+import { pokedexCommand } from './commands/pokedex.js';
+import { evolveCommand } from './commands/evolve.js';
+import { badgesCommand } from './commands/badges.js';
+import { leaderboardCommand } from './commands/leaderboard.js';
+import { settingsCommand } from './commands/settings.js';
 
 let expiryTimer: ReturnType<typeof setInterval> | null = null;
 let rl: readline.Interface;
 
-// inquirer 사용 명령어 실행 전 readline을 닫고, 끝나면 다시 열어야 충돌 방지
 function closeRl(): void {
   if (rl) {
     rl.close();
@@ -30,6 +34,7 @@ function createRl(): readline.Interface {
   return rl;
 }
 
+// inquirer를 사용하는 명령어는 closeRl/createRl로 감싸야 함
 async function handleCommand(input: string): Promise<boolean> {
   const cmd = input.trim().toLowerCase();
 
@@ -48,11 +53,32 @@ async function handleCommand(input: string): Promise<boolean> {
       await bagCommand();
       break;
     case 'status':
-      await statusCommand();
+      await statsCommand();
       break;
     case 'config':
       closeRl();
       await configCommand();
+      createRl();
+      break;
+    case 'pokedex':
+      closeRl();
+      await pokedexCommand();
+      createRl();
+      break;
+    case 'evolve':
+      closeRl();
+      await evolveCommand();
+      createRl();
+      break;
+    case 'badges':
+      await badgesCommand();
+      break;
+    case 'leaderboard':
+      await leaderboardCommand();
+      break;
+    case 'settings':
+      closeRl();
+      await settingsCommand();
       createRl();
       break;
     case 'help':
