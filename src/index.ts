@@ -20,6 +20,7 @@ import { huntCommand } from './commands/hunt.js';
 import { trainCommand } from './commands/train.js';
 import { adventureCommand } from './commands/adventure.js';
 import { battleCommand } from './commands/battle.js';
+import { onlineCommand } from './commands/online.js';
 
 let expiryTimer: ReturnType<typeof setInterval> | null = null;
 let rl: readline.Interface;
@@ -103,6 +104,11 @@ async function handleCommand(input: string): Promise<boolean> {
     case 'battle':
       closeRl();
       await battleCommand();
+      createRl();
+      break;
+    case 'online':
+      closeRl();
+      await onlineCommand();
       createRl();
       break;
     case 'help':

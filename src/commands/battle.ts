@@ -23,6 +23,15 @@ import {
   teamDataToBattlePokemon,
   GistTeamData,
 } from '../services/battle.js';
+import {
+  isSupabaseConfigured,
+  publishBattleTeam,
+  fetchBattleTeam,
+  getAllBattleTeams,
+  recordBattleResult,
+  getPvpRecordOnline,
+  syncLeaderboard,
+} from '../services/supabase.js';
 import { pokemonTypeColor } from '../ui/display.js';
 
 const BATTLE_COOLDOWN_MS = 5 * 60 * 1000;
@@ -118,13 +127,34 @@ async function setupTeam(): Promise<void> {
     setConfig('my_username', trainerName);
   }
 
+  const team = selected.map((p) => ({
+    pokemonId: p.pokemon_id,
+    pokemonName: p.pokemon_name,
+    level: p.level,
+  }));
+
+  const githubUsername = getConfig('github_username') || '';
+
+  // Supabase 우선, 실패 시 Gist 폴백
+  if (isSupabaseConfigured() && githubUsername) {
+    console.log(chalk.cyan('\n  📡 서버에 팀 게시 중...\n'));
+    const ok = await publishBattleTeam(githubUsername, team);
+    if (ok) {
+      console.log(chalk.green('  ✅ 배틀 팀이 서버에 게시되었습니다!'));
+      console.log(chalk.yellow(`\n  내 팀:`));
+      for (const p of selected) {
+        console.log(chalk.white(`    ${chalk.hex(pokemonTypeColor(p.pokemon_id))(p.pokemon_name)} Lv.${p.level}`));
+      }
+      console.log(chalk.gray('\n  다른 유저가 내 GitHub 유저네임으로 도전할 수 있습니다!'));
+      return;
+    }
+    console.log(chalk.yellow('  ⚠️  서버 게시 실패. Gist로 폴백합니다.'));
+  }
+
+  // Gist 폴백
   const teamData: GistTeamData = {
     trainer: trainerName,
-    team: selected.map((p) => ({
-      pokemonId: p.pokemon_id,
-      pokemonName: p.pokemon_name,
-      level: p.level,
-    })),
+    team,
     updatedAt: new Date().toISOString(),
   };
 
@@ -133,16 +163,13 @@ async function setupTeam(): Promise<void> {
   try {
     const gistId = await publishTeamToGist(teamData);
     setConfig('battle_gist_id', gistId);
-
     console.log(chalk.green('  ✅ 배틀 팀이 Gist에 게시되었습니다!'));
-    console.log(chalk.gray(`  Gist ID: ${gistId}`));
     console.log(chalk.yellow(`\n  내 팀:`));
     for (const p of selected) {
       console.log(chalk.white(`    ${chalk.hex(pokemonTypeColor(p.pokemon_id))(p.pokemon_name)} Lv.${p.level}`));
     }
-    console.log(chalk.gray('\n  다른 유저가 내 GitHub 유저네임으로 도전할 수 있습니다!'));
   } catch (err: any) {
-    console.log(chalk.red(`  Gist 게시 실패: ${err.message}`));
+    console.log(chalk.red(`  게시 실패: ${err.message}`));
   }
 }
 
@@ -166,25 +193,80 @@ async function challengeUser(): Promise<void> {
     return;
   }
 
-  // 상대 GitHub 유저네임 입력
-  const { username } = await inquirer.prompt([{
-    type: 'input',
-    name: 'username',
-    message: '상대 GitHub 유저네임:',
-    validate: (v: string) => v.trim().length > 0 || '유저네임을 입력해주세요',
-  }]);
+  // Supabase: 등록된 상대 목록에서 선택 or 직접 입력
+  let opponentUsername = '';
+  let opponentTeamRaw: { pokemonId: number; pokemonName: string; level: number }[] = [];
+  let opponentDisplayName = '';
 
-  console.log(chalk.cyan(`\n  📡 ${username.trim()}의 배틀 팀을 불러오는 중...\n`));
+  if (isSupabaseConfigured()) {
+    const teams = await getAllBattleTeams();
+    const myUsername = getConfig('github_username') || '';
+    const others = teams.filter((t) => t.github_username !== myUsername);
 
-  const opponentData = await fetchOpponentTeam(username.trim());
-  if (!opponentData) {
-    console.log(chalk.red(`  ${username.trim()}의 배틀 팀을 찾을 수 없습니다.`));
-    console.log(chalk.gray('  상대가 battle → "배틀 팀 설정"으로 팀을 Gist에 게시해야 합니다.'));
+    if (others.length > 0) {
+      const { choice } = await inquirer.prompt([{
+        type: 'list',
+        name: 'choice',
+        message: '상대를 선택하세요:',
+        choices: [
+          ...others.map((t) => ({
+            name: `👤 ${t.github_username}  (포켓몬 ${t.team_data.length}마리)`,
+            value: t.github_username,
+          })),
+          { name: chalk.gray('직접 입력...'), value: '__manual__' },
+        ],
+      }]);
+
+      if (choice !== '__manual__') {
+        opponentUsername = choice;
+        const team = others.find((t) => t.github_username === choice);
+        if (team) {
+          opponentTeamRaw = team.team_data;
+          opponentDisplayName = team.github_username;
+        }
+      }
+    }
+  }
+
+  // Supabase에서 못 찾았으면 직접 입력 (Gist 폴백)
+  if (!opponentUsername) {
+    const { username } = await inquirer.prompt([{
+      type: 'input',
+      name: 'username',
+      message: '상대 GitHub 유저네임:',
+      validate: (v: string) => v.trim().length > 0 || '유저네임을 입력해주세요',
+    }]);
+    opponentUsername = username.trim();
+
+    console.log(chalk.cyan(`\n  📡 ${opponentUsername}의 배틀 팀을 불러오는 중...\n`));
+
+    // Supabase 시도
+    if (isSupabaseConfigured()) {
+      const sbTeam = await fetchBattleTeam(opponentUsername);
+      if (sbTeam) {
+        opponentTeamRaw = sbTeam.team_data;
+        opponentDisplayName = sbTeam.github_username;
+      }
+    }
+
+    // Supabase 실패 → Gist 폴백
+    if (opponentTeamRaw.length === 0) {
+      const gistData = await fetchOpponentTeam(opponentUsername);
+      if (gistData) {
+        opponentTeamRaw = gistData.team;
+        opponentDisplayName = gistData.trainer;
+      }
+    }
+  }
+
+  if (opponentTeamRaw.length === 0) {
+    console.log(chalk.red(`  ${opponentUsername}의 배틀 팀을 찾을 수 없습니다.`));
+    console.log(chalk.gray('  상대가 battle → "배틀 팀 설정"으로 팀을 등록해야 합니다.'));
     return;
   }
 
-  console.log(chalk.red(`  👤 ${opponentData.trainer}의 팀:`));
-  for (const p of opponentData.team) {
+  console.log(chalk.red(`  👤 ${opponentDisplayName}의 팀:`));
+  for (const p of opponentTeamRaw) {
     console.log(chalk.red(`    ${p.pokemonName} Lv.${p.level}`));
   }
   console.log();
@@ -219,11 +301,16 @@ async function challengeUser(): Promise<void> {
     myPokemonData.level
   );
 
-  const opponentTeam = await teamDataToBattlePokemon(opponentData);
+  const opponentTeamGist: GistTeamData = {
+    trainer: opponentDisplayName,
+    team: opponentTeamRaw,
+    updatedAt: '',
+  };
+  const opponentTeam = await teamDataToBattlePokemon(opponentTeamGist);
 
   const myName = getConfig('my_username') || '나';
 
-  console.log(chalk.yellow(`  ═══ ⚔️ ${myName} VS ${opponentData.trainer} ═══\n`));
+  console.log(chalk.yellow(`  ═══ ⚔️ ${myName} VS ${opponentDisplayName} ═══\n`));
   console.log(chalk.blue(`  [나] ${myFighter.koreanName} Lv.${myFighter.level}`));
   console.log(chalk.gray(`  기술: ${myFighter.skills.map(s => s.name).join(', ')}`));
   console.log();
@@ -233,10 +320,10 @@ async function challengeUser(): Promise<void> {
 
   for (let i = 0; i < opponentTeam.length; i++) {
     const enemy = opponentTeam[i];
-    console.log(chalk.red(`  👤 ${opponentData.trainer}: "${enemy.koreanName}, 가랏!"`));
+    console.log(chalk.red(`  👤 ${opponentDisplayName}: "${enemy.koreanName}, 가랏!"`));
     console.log(chalk.gray(`  상대 기술: ${enemy.skills.map(s => s.name).join(', ')}\n`));
 
-    const result = await runBattle(myFighter, enemy, myName, opponentData.trainer);
+    const result = await runBattle(myFighter, enemy, myName, opponentDisplayName);
 
     if (result === 'flee') {
       finalResult = 'flee';
@@ -263,7 +350,7 @@ async function challengeUser(): Promise<void> {
   console.log(chalk.gray('\n  ═══════════════════════════════════'));
 
   if (finalResult === 'win') {
-    console.log(chalk.green.bold(`\n  🏆 ${opponentData.trainer}에게 승리!`));
+    console.log(chalk.green.bold(`\n  🏆 ${opponentDisplayName}에게 승리!`));
     console.log(chalk.green(`  경험치 +${totalExpGained}, 스태미나 +2`));
     addExperience(myPokemonData.id, totalExpGained);
     addStamina(2);
@@ -274,7 +361,7 @@ async function challengeUser(): Promise<void> {
 
   const lastEnemy = opponentTeam[opponentTeam.length - 1];
   addBattleLog(
-    opponentData.trainer,
+    opponentDisplayName,
     myPokemonData.pokemon_id,
     myPokemonData.pokemon_name,
     lastEnemy.pokemonId,
@@ -282,6 +369,25 @@ async function challengeUser(): Promise<void> {
     finalResult,
     finalResult === 'win' ? totalExpGained : 0
   );
+
+  // Supabase에 전적 기록 + 리더보드 동기화
+  if (isSupabaseConfigured()) {
+    const myUsername = getConfig('github_username') || '';
+    await recordBattleResult({
+      challenger: myUsername,
+      opponent: opponentUsername,
+      challenger_pokemon: myPokemonData.pokemon_name,
+      opponent_pokemon: lastEnemy.koreanName,
+      result: finalResult,
+      exp_gained: finalResult === 'win' ? totalExpGained : 0,
+    });
+
+    const stats = getBattleStats();
+    await syncLeaderboard(myUsername, {
+      battleWins: stats.wins,
+      battleLosses: stats.losses,
+    });
+  }
 }
 
 // --- 턴제 배틀 ---

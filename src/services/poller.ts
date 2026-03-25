@@ -7,7 +7,9 @@ import {
   markCommitProcessed,
   addEncounter,
   addStamina,
+  getTotalCommits,
 } from './database.js';
+import { isSupabaseConfigured, syncLeaderboard } from './supabase.js';
 import { getRandomPokemonId, getPokemonInfo, calculateLevel, RARITY_CONFIG } from './pokemon.js';
 
 let pollingTimer: ReturnType<typeof setInterval> | null = null;
@@ -113,6 +115,14 @@ async function processNewCommits(): Promise<void> {
 
       // 새 커밋마다 스태미나 +1
       addStamina(1);
+
+      // Supabase 리더보드 동기화 (비동기, 에러 무시)
+      if (isSupabaseConfigured()) {
+        const ghUser = getConfig('github_username');
+        if (ghUser) {
+          syncLeaderboard(ghUser, { totalCommits: getTotalCommits() }).catch(() => {});
+        }
+      }
 
       const pokemonId = getRandomPokemonId();
       const pokemonInfo = await getPokemonInfo(pokemonId);

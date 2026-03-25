@@ -162,3 +162,46 @@ export interface BattleLog {
   exp_gained: number;
   battled_at: string;
 }
+
+// --- Supabase 공유 데이터 ---
+export interface SupabaseTrainer {
+  id?: string;
+  github_username: string;
+  display_name: string;
+  total_commits: number;
+  total_caught: number;
+  total_battle_wins: number;
+  pokedex_count: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface LeaderboardEntry {
+  github_username: string;
+  display_name: string;
+  total_commits: number;
+  total_caught: number;
+  battle_wins: number;
+  battle_losses: number;
+  pokedex_count: number;
+  score: number;
+  updated_at?: string;
+}
+
+export interface BattleTeamEntry {
+  id?: string;
+  github_username: string;
+  team_data: { pokemonId: number; pokemonName: string; level: number }[];
+  updated_at?: string;
+}
+
+export interface BattleRecordEntry {
+  id?: string;
+  challenger: string;
+  opponent: string;
+  challenger_pokemon: string;
+  opponent_pokemon: string;
+  result: 'win' | 'lose' | 'flee';
+  exp_gained: number;
+  created_at?: string;
+}
