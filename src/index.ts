@@ -4,7 +4,7 @@ import chalk from 'chalk';
 import readline from 'readline';
 import { showBanner, getPrompt } from './ui/banner.js';
 import { getDb, expireEncounters, getConfig } from './services/database.js';
-import { startPolling, stopPolling } from './services/poller.js';
+import { startPolling, stopPolling, manualPoll } from './services/poller.js';
 import { encounterCommand } from './commands/encounter.js';
 import { catchCommand } from './commands/catch.js';
 import { bagCommand } from './commands/bag.js';
@@ -110,6 +110,9 @@ async function handleCommand(input: string): Promise<boolean> {
       closeRl();
       await onlineCommand();
       createRl();
+      break;
+    case 'poll':
+      await manualPoll();
       break;
     case 'help':
       helpCommand();

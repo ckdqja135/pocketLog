@@ -86,24 +86,36 @@ async function getCommitDiffSize(repo: string, sha: string, token: string): Prom
   }
 }
 
-async function processNewCommits(): Promise<void> {
+async function processNewCommits(debug: boolean = false): Promise<void> {
   const token = getConfig('github_token');
   const reposStr = getConfig('repos');
 
-  if (!token || !reposStr) return;
+  if (!token || !reposStr) {
+    if (debug) console.log(chalk.red('  [디버그] GitHub 토큰 또는 레포 설정이 없습니다.'));
+    return;
+  }
 
   let repos: string[];
   if (reposStr.trim() === '*') {
     repos = await fetchAllUserRepos(token);
+    if (debug) console.log(chalk.gray(`  [디버그] 전체 레포 ${repos.length}개 발견`));
   } else {
     repos = reposStr.split(',').map((r) => r.trim()).filter(Boolean);
   }
 
+  if (debug) console.log(chalk.gray(`  [디버그] 감시 대상: ${repos.slice(0, 5).join(', ')}${repos.length > 5 ? ` 외 ${repos.length - 5}개` : ''}`));
+
+  let newCommitCount = 0;
+
   for (const repo of repos) {
     const commits = await fetchRecentCommits(repo, token);
+    if (debug && commits.length > 0) {
+      console.log(chalk.gray(`  [디버그] ${repo}: 커밋 ${commits.length}개 조회됨`));
+    }
 
     for (const commit of commits) {
       if (isCommitProcessed(commit.sha)) continue;
+      newCommitCount++;
 
       const diffSize = await getCommitDiffSize(repo, commit.sha, token);
       const authorName = commit.commit.author.name;
@@ -149,6 +161,14 @@ async function processNewCommits(): Promise<void> {
       await delay(2000);
     }
   }
+
+  if (debug) {
+    if (newCommitCount === 0) {
+      console.log(chalk.gray('  [디버그] 새로운 커밋이 없습니다. (이미 처리된 커밋만 발견)'));
+    } else {
+      console.log(chalk.green(`  [디버그] 새 커밋 ${newCommitCount}개 처리 완료`));
+    }
+  }
 }
 
 function delay(ms: number): Promise<void> {
@@ -179,6 +199,18 @@ export function startPolling(): void {
   }, intervalMin * 60 * 1000);
 
   console.log(chalk.green(`📡 GitHub 폴링을 시작합니다. (${intervalMin}분 간격)`));
+}
+
+// 수동 폴링 (디버그 모드)
+export async function manualPoll(): Promise<void> {
+  console.log(chalk.cyan('\n  🔍 수동 폴링 실행...\n'));
+  const wasFirstPoll = isFirstPoll;
+  isFirstPoll = false; // 수동 폴링은 항상 조우 생성
+  try {
+    await processNewCommits(true);
+  } finally {
+    if (wasFirstPoll) isFirstPoll = wasFirstPoll;
+  }
 }
 
 export function stopPolling(): void {
