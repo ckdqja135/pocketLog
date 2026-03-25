@@ -27,10 +27,20 @@ npm run dev
 
 ## 초기 설정
 
+### 1. GitHub Personal Access Token 발급
+
+1. GitHub 접속 → 우측 상단 프로필 → **Settings**
+2. 좌측 하단 **Developer settings** → **Personal access tokens** → **Tokens (classic)**
+3. **Generate new token (classic)** 클릭
+4. 권한 선택: `repo` (전체 체크)
+5. **Generate token** → `ghp_`로 시작하는 토큰 복사
+
+### 2. pokelog에서 설정
+
 ```
 pokelog> config
-? GitHub Personal Access Token: ghp_xxxxx
-? 감시할 레포: *              # 전체 레포 또는 owner/repo
+? GitHub Personal Access Token: ********    # 위에서 복사한 토큰
+? 모니터링할 레포: *                         # * = 전체 레포, 또는 owner/repo (쉼표 구분)
 ```
 
 설정 완료 후 자동으로 커밋을 폴링하며, 새 커밋마다 야생 포켓몬이 출현합니다.
