@@ -16,6 +16,15 @@ export function helpCommand(): void {
       ],
     },
     {
+      title: '액션',
+      commands: [
+        ['hunt',      '🎯 포켓몬 사냥 (지역 탐색, 스태미나 소모)'],
+        ['train',     '💪 포켓몬 훈련 (레벨업)'],
+        ['adventure', '🗺️ 포켓몬 모험 보내기 (방치형 보상)'],
+        ['battle',    '⚔️ NPC 트레이너와 배틀'],
+      ],
+    },
+    {
       title: '트레이너',
       commands: [
         ['status',      '내 통계 + 커밋 히트맵'],

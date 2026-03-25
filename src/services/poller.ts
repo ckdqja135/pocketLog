@@ -6,6 +6,7 @@ import {
   isCommitProcessed,
   markCommitProcessed,
   addEncounter,
+  addStamina,
 } from './database.js';
 import { getRandomPokemonId, getPokemonInfo, calculateLevel, RARITY_CONFIG } from './pokemon.js';
 
@@ -110,11 +111,16 @@ async function processNewCommits(): Promise<void> {
       // 첫 폴링 시에는 기존 커밋을 조용히 등록만 (알림 없이)
       if (isFirstPoll) continue;
 
+      // 새 커밋마다 스태미나 +1
+      addStamina(1);
+
       const pokemonId = getRandomPokemonId();
       const pokemonInfo = await getPokemonInfo(pokemonId);
       const level = calculateLevel(diffSize);
 
-      const expiresAt = new Date(Date.now() + 70 * 60 * 1000).toISOString();
+      // SQLite datetime 호환 형식 (UTC)
+      const expires = new Date(Date.now() + 70 * 60 * 1000);
+      const expiresAt = expires.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
 
       addEncounter(pokemonInfo.id, pokemonInfo.koreanName, level, expiresAt, commit.sha, pokemonInfo.rarity);
 

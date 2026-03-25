@@ -16,6 +16,10 @@ import { evolveCommand } from './commands/evolve.js';
 import { badgesCommand } from './commands/badges.js';
 import { leaderboardCommand } from './commands/leaderboard.js';
 import { settingsCommand } from './commands/settings.js';
+import { huntCommand } from './commands/hunt.js';
+import { trainCommand } from './commands/train.js';
+import { adventureCommand } from './commands/adventure.js';
+import { battleCommand } from './commands/battle.js';
 
 let expiryTimer: ReturnType<typeof setInterval> | null = null;
 let rl: readline.Interface;
@@ -79,6 +83,26 @@ async function handleCommand(input: string): Promise<boolean> {
     case 'settings':
       closeRl();
       await settingsCommand();
+      createRl();
+      break;
+    case 'hunt':
+      closeRl();
+      await huntCommand();
+      createRl();
+      break;
+    case 'train':
+      closeRl();
+      await trainCommand();
+      createRl();
+      break;
+    case 'adventure':
+      closeRl();
+      await adventureCommand();
+      createRl();
+      break;
+    case 'battle':
+      closeRl();
+      await battleCommand();
       createRl();
       break;
     case 'help':

@@ -25,7 +25,8 @@ export async function catchCommand(): Promise<void> {
   }
 
   // 만료 확인
-  if (new Date(encounter.expires_at).getTime() < Date.now()) {
+  const utcStr = encounter.expires_at.includes('T') ? encounter.expires_at : encounter.expires_at + 'Z';
+  if (new Date(utcStr).getTime() < Date.now()) {
     console.log(chalk.red(`  ${encounter.pokemon_name}은(는) 이미 도망갔습니다!`));
     markEncounterFled(encounter.id);
     return;

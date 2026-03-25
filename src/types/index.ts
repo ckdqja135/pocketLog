@@ -24,6 +24,7 @@ export interface CaughtPokemon {
   caught_at: string;
   commit_sha: string;
   rarity: string;
+  experience: number;
 }
 
 export interface PokemonInfo {
@@ -72,4 +73,92 @@ export interface Badge {
   description: string;
   icon: string;
   unlockedAt?: string;
+}
+
+// --- 사냥 시스템 ---
+export interface HuntZone {
+  name: string;
+  icon: string;
+  staminaCost: number;
+  rarityWeights: Record<Rarity, number>;
+}
+
+// --- 레벨업 시스템 ---
+export interface TrainingType {
+  name: string;
+  icon: string;
+  expGain: number;
+  staminaCost: number;
+}
+
+// --- 모험 시스템 ---
+export type AdventureType = 'short' | 'medium' | 'long';
+
+export interface Adventure {
+  id: number;
+  caught_pokemon_id: number;
+  pokemon_name: string;
+  adventure_type: AdventureType;
+  started_at: string;
+  ends_at: string;
+  completed: number; // 0: 진행중, 1: 완료(수령대기), 2: 수령완료
+  reward_exp: number;
+  reward_stamina: number;
+  reward_pokemon_id: number | null;
+}
+
+export interface AdventureConfig {
+  name: string;
+  icon: string;
+  type: AdventureType;
+  durationMinutes: number;
+  expReward: [number, number]; // [min, max]
+  staminaReward: [number, number];
+  pokemonChance: number; // 0~1
+}
+
+// --- 스킬 시스템 ---
+export type PokemonType =
+  | 'fire' | 'water' | 'grass' | 'electric' | 'ice'
+  | 'fighting' | 'poison' | 'ground' | 'flying' | 'psychic'
+  | 'bug' | 'rock' | 'ghost' | 'dragon' | 'dark' | 'normal';
+
+export type SkillEffect = 'damage' | 'heal' | 'drain' | 'burn' | 'paralyze';
+
+export interface Skill {
+  name: string;
+  icon: string;
+  type: PokemonType;
+  power: number;       // 데미지/힐 배율
+  mpCost: number;
+  effect: SkillEffect;
+  description: string;
+}
+
+// --- PVP 배틀 시스템 ---
+export interface BattlePokemonState {
+  pokemonId: number;
+  name: string;
+  koreanName: string;
+  level: number;
+  maxHp: number;
+  hp: number;
+  maxMp: number;
+  mp: number;
+  skills: Skill[];
+  isDefending: boolean;
+  isBurned: boolean;
+  isParalyzed: boolean;
+}
+
+export interface BattleLog {
+  id: number;
+  trainer_type: string;
+  my_pokemon_id: number;
+  my_pokemon_name: string;
+  opponent_pokemon_id: number;
+  opponent_pokemon_name: string;
+  result: 'win' | 'lose' | 'flee';
+  exp_gained: number;
+  battled_at: string;
 }

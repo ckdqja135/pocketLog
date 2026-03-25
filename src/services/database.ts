@@ -2,7 +2,7 @@ import { createRequire } from 'module';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import { Encounter, CaughtPokemon, Badge } from '../types/index.js';
+import { Encounter, CaughtPokemon, Badge, Adventure, BattleLog } from '../types/index.js';
 
 const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
@@ -68,15 +68,52 @@ function initTables(): void {
       icon TEXT NOT NULL,
       unlocked_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS trainer_stats (
+      key TEXT PRIMARY KEY,
+      value INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS adventures (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      caught_pokemon_id INTEGER NOT NULL,
+      pokemon_name TEXT NOT NULL,
+      adventure_type TEXT NOT NULL,
+      started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      ends_at DATETIME NOT NULL,
+      completed INTEGER DEFAULT 0,
+      reward_exp INTEGER DEFAULT 0,
+      reward_stamina INTEGER DEFAULT 0,
+      reward_pokemon_id INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS battle_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trainer_type TEXT NOT NULL,
+      my_pokemon_id INTEGER NOT NULL,
+      my_pokemon_name TEXT NOT NULL,
+      opponent_pokemon_id INTEGER NOT NULL,
+      opponent_pokemon_name TEXT NOT NULL,
+      result TEXT NOT NULL,
+      exp_gained INTEGER DEFAULT 0,
+      battled_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
-  // 기존 테이블에 rarity 컬럼이 없으면 추가 (마이그레이션)
+  // 마이그레이션
   try {
     database.exec(`ALTER TABLE encounters ADD COLUMN rarity TEXT DEFAULT 'common'`);
   } catch { /* 이미 존재 */ }
   try {
     database.exec(`ALTER TABLE caught_pokemon ADD COLUMN rarity TEXT DEFAULT 'common'`);
   } catch { /* 이미 존재 */ }
+  try {
+    database.exec(`ALTER TABLE caught_pokemon ADD COLUMN experience INTEGER DEFAULT 0`);
+  } catch { /* 이미 존재 */ }
+
+  // 스태미나 초기값 설정
+  database.prepare('INSERT OR IGNORE INTO trainer_stats (key, value) VALUES (?, ?)').run('stamina', 5);
+  database.prepare('INSERT OR IGNORE INTO trainer_stats (key, value) VALUES (?, ?)').run('max_stamina', 10);
 }
 
 // --- 커밋 관련 ---
@@ -282,4 +319,137 @@ export function getCommitStreak(): number {
 export function getStreakBonus(): number {
   const streak = getCommitStreak();
   return Math.min(0.3, streak * 0.05);
+}
+
+// --- 스태미나 관련 ---
+export function getStamina(): number {
+  const row = getDb().prepare('SELECT value FROM trainer_stats WHERE key = ?').get('stamina') as { value: number } | undefined;
+  return row?.value ?? 0;
+}
+
+export function getMaxStamina(): number {
+  const row = getDb().prepare('SELECT value FROM trainer_stats WHERE key = ?').get('max_stamina') as { value: number } | undefined;
+  return row?.value ?? 10;
+}
+
+export function useStamina(amount: number): boolean {
+  const current = getStamina();
+  if (current < amount) return false;
+  getDb().prepare('UPDATE trainer_stats SET value = value - ? WHERE key = ?').run(amount, 'stamina');
+  return true;
+}
+
+export function addStamina(amount: number): void {
+  const max = getMaxStamina();
+  getDb().prepare('UPDATE trainer_stats SET value = MIN(value + ?, ?) WHERE key = ?').run(amount, max, 'stamina');
+}
+
+// --- 경험치 & 레벨업 ---
+export function getCaughtPokemonById(id: number): CaughtPokemon | undefined {
+  return getDb().prepare('SELECT * FROM caught_pokemon WHERE id = ?').get(id) as CaughtPokemon | undefined;
+}
+
+export function addExperience(caughtPokemonId: number, exp: number): { leveled: boolean; newLevel: number; totalExp: number } {
+  const pokemon = getCaughtPokemonById(caughtPokemonId);
+  if (!pokemon) return { leveled: false, newLevel: 0, totalExp: 0 };
+
+  const currentExp = (pokemon.experience || 0) + exp;
+  const requiredExp = pokemon.level * 10;
+  let newLevel = pokemon.level;
+  let remaining = currentExp;
+
+  // 연속 레벨업 처리
+  while (remaining >= newLevel * 10 && newLevel < 100) {
+    remaining -= newLevel * 10;
+    newLevel++;
+  }
+
+  getDb().prepare('UPDATE caught_pokemon SET experience = ?, level = ? WHERE id = ?').run(remaining, newLevel, caughtPokemonId);
+
+  return { leveled: newLevel > pokemon.level, newLevel, totalExp: remaining };
+}
+
+// --- 모험 관련 ---
+export function addAdventure(caughtPokemonId: number, pokemonName: string, adventureType: string, endsAt: string, rewardExp: number, rewardStamina: number, rewardPokemonId: number | null): void {
+  getDb().prepare(
+    'INSERT INTO adventures (caught_pokemon_id, pokemon_name, adventure_type, ends_at, reward_exp, reward_stamina, reward_pokemon_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(caughtPokemonId, pokemonName, adventureType, endsAt, rewardExp, rewardStamina, rewardPokemonId);
+}
+
+export function getActiveAdventure(): Adventure | undefined {
+  return getDb().prepare(
+    "SELECT * FROM adventures WHERE completed = 0 ORDER BY started_at DESC LIMIT 1"
+  ).get() as Adventure | undefined;
+}
+
+export function getCompletedAdventures(): Adventure[] {
+  // 시간이 지난 모험을 완료 상태로 업데이트
+  getDb().prepare(
+    "UPDATE adventures SET completed = 1 WHERE completed = 0 AND ends_at <= datetime('now')"
+  ).run();
+  return getDb().prepare(
+    "SELECT * FROM adventures WHERE completed = 1"
+  ).all() as Adventure[];
+}
+
+export function claimAdventure(id: number): void {
+  getDb().prepare('UPDATE adventures SET completed = 2 WHERE id = ?').run(id);
+}
+
+export function isPokemonOnAdventure(caughtPokemonId: number): boolean {
+  const row = getDb().prepare(
+    'SELECT 1 FROM adventures WHERE caught_pokemon_id = ? AND completed = 0'
+  ).get(caughtPokemonId);
+  return !!row;
+}
+
+// --- 배틀 관련 ---
+export function addBattleLog(
+  trainerType: string, myPokemonId: number, myPokemonName: string,
+  opponentPokemonId: number, opponentPokemonName: string,
+  result: string, expGained: number
+): void {
+  getDb().prepare(
+    'INSERT INTO battle_log (trainer_type, my_pokemon_id, my_pokemon_name, opponent_pokemon_id, opponent_pokemon_name, result, exp_gained) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(trainerType, myPokemonId, myPokemonName, opponentPokemonId, opponentPokemonName, result, expGained);
+}
+
+export function getLastBattleTime(): string | undefined {
+  const row = getDb().prepare(
+    'SELECT battled_at FROM battle_log ORDER BY battled_at DESC LIMIT 1'
+  ).get() as { battled_at: string } | undefined;
+  return row?.battled_at;
+}
+
+export function getBattleStats(): { wins: number; losses: number; flees: number } {
+  const wins = (getDb().prepare("SELECT COUNT(*) as c FROM battle_log WHERE result = 'win'").get() as { c: number }).c;
+  const losses = (getDb().prepare("SELECT COUNT(*) as c FROM battle_log WHERE result = 'lose'").get() as { c: number }).c;
+  const flees = (getDb().prepare("SELECT COUNT(*) as c FROM battle_log WHERE result = 'flee'").get() as { c: number }).c;
+  return { wins, losses, flees };
+}
+
+// --- PVP: 다른 유저 목록 (커밋 기반) ---
+export function getOtherUsers(myName?: string): { author: string; commits: number }[] {
+  const rows = getDb().prepare(
+    'SELECT author, COUNT(*) as commits FROM processed_commits GROUP BY author ORDER BY commits DESC'
+  ).all() as { author: string; commits: number }[];
+
+  if (myName) {
+    return rows.filter((r) => r.author !== myName);
+  }
+  return rows;
+}
+
+export function getMyUsername(): string | undefined {
+  return getConfig('my_username') || undefined;
+}
+
+export function getPvpRecord(opponent: string): { wins: number; losses: number } {
+  const wins = (getDb().prepare(
+    "SELECT COUNT(*) as c FROM battle_log WHERE trainer_type = ? AND result = 'win'"
+  ).get(opponent) as { c: number }).c;
+  const losses = (getDb().prepare(
+    "SELECT COUNT(*) as c FROM battle_log WHERE trainer_type = ? AND result = 'lose'"
+  ).get(opponent) as { c: number }).c;
+  return { wins, losses };
 }

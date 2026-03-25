@@ -15,7 +15,9 @@ export async function showPokemonImage(spriteUrl: string): Promise<void> {
 }
 
 export function formatTimeRemaining(expiresAt: string): string {
-  const remaining = new Date(expiresAt).getTime() - Date.now();
+  // SQLite 형식 (2026-03-25 15:00:00)을 UTC로 파싱
+  const utcStr = expiresAt.includes('T') ? expiresAt : expiresAt + 'Z';
+  const remaining = new Date(utcStr).getTime() - Date.now();
   if (remaining <= 0) return chalk.red('만료됨');
 
   const minutes = Math.floor(remaining / 60000);
