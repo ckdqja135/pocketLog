@@ -1,4 +1,5 @@
 import got from 'got';
+import chalk from 'chalk';
 import { PokemonInfo, BallType, Rarity } from '../types/index.js';
 
 const MAX_POKEMON_ID = 386; // 1~3세대
@@ -93,18 +94,42 @@ export function calculateLevel(diffLines: number): number {
   return Math.floor(Math.random() * 10) + 18;
 }
 
+const TYPE_KO: Record<string, string> = {
+  normal: '노말', fire: '불꽃', water: '물', electric: '전기',
+  grass: '풀', ice: '얼음', fighting: '격투', poison: '독',
+  ground: '땅', flying: '비행', psychic: '에스퍼', bug: '벌레',
+  rock: '바위', ghost: '고스트', dragon: '드래곤', dark: '악',
+  steel: '강철', fairy: '페어리',
+};
+
+const TYPE_ICON: Record<string, string> = {
+  normal: '⚪', fire: '🔥', water: '💧', electric: '⚡',
+  grass: '🌿', ice: '❄️', fighting: '🥊', poison: '☠️',
+  ground: '🌍', flying: '🕊️', psychic: '🔮', bug: '🐛',
+  rock: '🪨', ghost: '👻', dragon: '🐉', dark: '🌑',
+  steel: '⚙️', fairy: '🧚',
+};
+
 export async function getPokemonInfo(pokemonId: number): Promise<PokemonInfo> {
   const rarity = getRarity(pokemonId);
   try {
-    const speciesRes = await got(`https://pokeapi.co/api/v2/pokemon-species/${pokemonId}`, {
-      responseType: 'json',
-    });
+    // species와 pokemon 데이터를 동시에 가져옴
+    const [speciesRes, pokemonRes] = await Promise.all([
+      got(`https://pokeapi.co/api/v2/pokemon-species/${pokemonId}`, { responseType: 'json' }),
+      got(`https://pokeapi.co/api/v2/pokemon/${pokemonId}`, { responseType: 'json' }),
+    ]);
     const speciesData = speciesRes.body as any;
+    const pokemonData = pokemonRes.body as any;
 
     const koreanEntry = speciesData.names?.find(
       (n: any) => n.language.name === 'ko'
     );
     const koreanName = koreanEntry?.name || speciesData.name;
+
+    // 타입 추출
+    const types: string[] = (pokemonData.types || [])
+      .sort((a: any, b: any) => a.slot - b.slot)
+      .map((t: any) => TYPE_KO[t.type.name] || t.type.name);
 
     // 진화 체인 ID 추출
     const evoChainUrl: string = speciesData.evolution_chain?.url || '';
@@ -118,6 +143,7 @@ export async function getPokemonInfo(pokemonId: number): Promise<PokemonInfo> {
       koreanName,
       spriteUrl,
       rarity,
+      types,
       evolutionChainId: evoChainId,
     };
   } catch {
@@ -127,9 +153,32 @@ export async function getPokemonInfo(pokemonId: number): Promise<PokemonInfo> {
       koreanName: `포켓몬 #${pokemonId}`,
       spriteUrl: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemonId}.png`,
       rarity,
+      types: [],
     };
   }
 }
+
+const TYPE_COLOR: Record<string, string> = {
+  normal: '#A8A878', fire: '#F08030', water: '#6890F0', electric: '#F8D030',
+  grass: '#78C850', ice: '#98D8D8', fighting: '#C03028', poison: '#A040A0',
+  ground: '#E0C068', flying: '#A890F0', psychic: '#F85888', bug: '#A8B820',
+  rock: '#B8A038', ghost: '#705898', dragon: '#7038F8', dark: '#705848',
+  steel: '#B8B8D0', fairy: '#EE99AC',
+};
+
+const KO_TO_ENG = Object.fromEntries(Object.entries(TYPE_KO).map(([k, v]) => [v, k]));
+
+export function formatTypes(types: string[]): string {
+  if (types.length === 0) return '';
+  return types.map(t => {
+    const eng = KO_TO_ENG[t] || '';
+    const icon = TYPE_ICON[eng] || '';
+    const color = TYPE_COLOR[eng] || '#AAAAAA';
+    return chalk.hex(color)(`${icon}${t}`);
+  }).join(' ');
+}
+
+export { TYPE_ICON, TYPE_KO };
 
 // 진화 가능 대상 조회 (PokeAPI 진화 체인)
 export async function getEvolution(pokemonId: number): Promise<{ evolvesToId: number; evolvesToName: string } | null> {

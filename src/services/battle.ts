@@ -3,6 +3,47 @@ import { Skill, PokemonType, BattlePokemonState } from '../types/index.js';
 import { getRandomPokemonId, getPokemonInfo } from './pokemon.js';
 import { getConfig } from './database.js';
 
+// --- 공식 타입 상성표 ---
+// 0 = 효과없음, 0.5 = 별로, 1 = 보통, 2 = 효과굉장
+const TYPE_CHART: Record<PokemonType, Partial<Record<PokemonType, number>>> = {
+  normal:   { rock: 0.5, ghost: 0, steel: 0.5 },
+  fire:     { fire: 0.5, water: 0.5, grass: 2, ice: 2, bug: 2, rock: 0.5, dragon: 0.5, steel: 2 },
+  water:    { fire: 2, water: 0.5, grass: 0.5, ground: 2, rock: 2, dragon: 0.5 },
+  electric: { water: 2, electric: 0.5, grass: 0.5, ground: 0, flying: 2, dragon: 0.5 },
+  grass:    { fire: 0.5, water: 2, grass: 0.5, poison: 0.5, ground: 2, flying: 0.5, bug: 0.5, rock: 2, dragon: 0.5, steel: 0.5 },
+  ice:      { fire: 0.5, water: 0.5, grass: 2, ice: 0.5, ground: 2, flying: 2, dragon: 2, steel: 0.5 },
+  fighting: { normal: 2, ice: 2, poison: 0.5, flying: 0.5, psychic: 0.5, bug: 0.5, rock: 2, ghost: 0, dark: 2, steel: 2, fairy: 0.5 },
+  poison:   { grass: 2, poison: 0.5, ground: 0.5, rock: 0.5, ghost: 0.5, steel: 0, fairy: 2 },
+  ground:   { fire: 2, electric: 2, grass: 0.5, poison: 2, flying: 0, bug: 0.5, rock: 2, steel: 2 },
+  flying:   { electric: 0.5, grass: 2, fighting: 2, bug: 2, rock: 0.5, steel: 0.5 },
+  psychic:  { fighting: 2, poison: 2, psychic: 0.5, dark: 0, steel: 0.5 },
+  bug:      { fire: 0.5, grass: 2, fighting: 0.5, poison: 0.5, flying: 0.5, psychic: 2, ghost: 0.5, dark: 2, steel: 0.5, fairy: 0.5 },
+  rock:     { fire: 2, ice: 2, fighting: 0.5, ground: 0.5, flying: 2, bug: 2, steel: 0.5 },
+  ghost:    { normal: 0, psychic: 2, ghost: 2, dark: 0.5 },
+  dragon:   { dragon: 2, steel: 0.5, fairy: 0 },
+  dark:     { fighting: 0.5, psychic: 2, ghost: 2, dark: 0.5, bug: 0.5, fairy: 0.5 },
+  steel:    { fire: 0.5, water: 0.5, electric: 0.5, ice: 2, rock: 2, steel: 0.5, fairy: 2 },
+  fairy:    { fire: 0.5, fighting: 2, poison: 0.5, dragon: 2, dark: 2, steel: 0.5 },
+};
+
+export function getTypeEffectiveness(attackType: PokemonType, defenderTypes: PokemonType[]): number {
+  let multiplier = 1;
+  for (const defType of defenderTypes) {
+    const chart = TYPE_CHART[attackType];
+    if (chart && chart[defType] !== undefined) {
+      multiplier *= chart[defType]!;
+    }
+  }
+  return multiplier;
+}
+
+export function getEffectivenessMessage(multiplier: number): string {
+  if (multiplier === 0) return '효과가 없는 듯하다...';
+  if (multiplier < 1) return '효과가 별로인 듯하다...';
+  if (multiplier > 1) return '효과가 굉장했다!';
+  return '';
+}
+
 // --- PokeAPI에서 실제 기술 가져오기 ---
 interface PokeApiMove {
   name: string;
@@ -144,15 +185,27 @@ function getDefaultSkills(): Skill[] {
 
 // --- 배틀 포켓몬 생성 (실제 기술 포함) ---
 export async function createBattlePokemon(
-  pokemonId: number, name: string, koreanName: string, level: number
+  pokemonId: number, name: string, koreanName: string, level: number,
+  bonusHp: number = 0, bonusAtk: number = 0, bonusDef: number = 0
 ): Promise<BattlePokemonState> {
-  const maxHp = level * 5 + 20;
+  const maxHp = level * 5 + 20 + bonusHp;
   const maxMp = level * 3 + 10;
   const skills = await fetchPokemonSkills(pokemonId);
+  const info = await getPokemonInfo(pokemonId);
+  // 한글 타입명 → 영문 PokemonType 변환
+  const koToType: Record<string, PokemonType> = {
+    '노말': 'normal', '불꽃': 'fire', '물': 'water', '전기': 'electric',
+    '풀': 'grass', '얼음': 'ice', '격투': 'fighting', '독': 'poison',
+    '땅': 'ground', '비행': 'flying', '에스퍼': 'psychic', '벌레': 'bug',
+    '바위': 'rock', '고스트': 'ghost', '드래곤': 'dragon', '악': 'dark',
+    '강철': 'steel', '페어리': 'fairy',
+  };
+  const types: PokemonType[] = info.types.map(t => koToType[t] || 'normal');
   return {
-    pokemonId, name, koreanName, level,
+    pokemonId, name, koreanName, level, types,
     maxHp, hp: maxHp,
     maxMp, mp: maxMp,
+    bonusAtk, bonusDef,
     skills,
     isDefending: false,
     isBurned: false,
@@ -265,13 +318,17 @@ export async function teamDataToBattlePokemon(teamData: GistTeamData): Promise<B
 }
 
 // --- 데미지 계산 ---
-export function calculateSkillDamage(attacker: BattlePokemonState, skill: Skill, defender: BattlePokemonState): number {
-  const baseDamage = (attacker.level * 2 + 5) * skill.power;
-  const defense = defender.level * 0.5;
+export function calculateSkillDamage(attacker: BattlePokemonState, skill: Skill, defender: BattlePokemonState): { damage: number; effectiveness: number } {
+  const baseDamage = (attacker.level * 2 + 5 + attacker.bonusAtk) * skill.power;
+  const defense = defender.level * 0.5 + defender.bonusDef;
   const defenseMultiplier = defender.isDefending ? 0.5 : 1.0;
   const variance = 0.85 + Math.random() * 0.3;
-  const damage = Math.max(1, Math.floor((baseDamage - defense) * defenseMultiplier * variance));
-  return damage;
+  // 자속보정 (STAB): 기술 타입이 포켓몬 타입과 같으면 1.5배
+  const stab = attacker.types.includes(skill.type) ? 1.5 : 1.0;
+  // 타입 상성
+  const effectiveness = getTypeEffectiveness(skill.type, defender.types);
+  const damage = Math.max(effectiveness === 0 ? 0 : 1, Math.floor((baseDamage - defense) * defenseMultiplier * variance * stab * effectiveness));
+  return { damage, effectiveness };
 }
 
 export function calculateHeal(user: BattlePokemonState, skill: Skill): number {

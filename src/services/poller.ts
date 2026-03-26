@@ -10,10 +10,9 @@ import {
   getTotalCommits,
 } from './database.js';
 import { isSupabaseConfigured, syncLeaderboard } from './supabase.js';
-import { getRandomPokemonId, getPokemonInfo, calculateLevel, RARITY_CONFIG } from './pokemon.js';
+import { getRandomPokemonId, getPokemonInfo, calculateLevel, RARITY_CONFIG, formatTypes } from './pokemon.js';
 
 let pollingTimer: ReturnType<typeof setInterval> | null = null;
-let isFirstPoll = true;
 
 async function fetchAllUserRepos(token: string): Promise<string[]> {
   const repos: string[] = [];
@@ -122,9 +121,6 @@ async function processNewCommits(debug: boolean = false): Promise<void> {
 
       markCommitProcessed(commit.sha, repo, authorName);
 
-      // 첫 폴링 시에는 기존 커밋을 조용히 등록만 (알림 없이)
-      if (isFirstPoll) continue;
-
       // 새 커밋마다 스태미나 +1
       addStamina(1);
 
@@ -151,9 +147,12 @@ async function processNewCommits(debug: boolean = false): Promise<void> {
         ? chalk.hex(rarityInfo.color)(` [${rarityInfo.icon} ${rarityInfo.label}]`)
         : '';
 
+      const typeTag = formatTypes(pokemonInfo.types);
+
       console.log(
         chalk.yellow(`\n🌿 야생의 ${chalk.bold(pokemonInfo.koreanName)} Lv.${level} 이(가) 나타났다!`) + rarityTag
       );
+      if (typeTag) console.log(chalk.gray(`   타입: ${typeTag}`));
       console.log(chalk.gray(`   (커밋: ${commit.sha.slice(0, 7)} by ${authorName})`));
       console.log(chalk.cyan('   → catch 를 입력하여 포획하세요!'));
       process.stdout.write(chalk.hex('#4FC3F7')('pokelog> '));
@@ -186,12 +185,7 @@ export function startPolling(): void {
     return;
   }
 
-  // 첫 폴링: 기존 커밋 조용히 등록
-  processNewCommits().then(() => {
-    isFirstPoll = false;
-  }).catch(() => {
-    isFirstPoll = false;
-  });
+  processNewCommits().catch(() => {});
 
   const intervalMin = parseInt(getConfig('poll_interval') || '5') || 5;
   pollingTimer = setInterval(() => {
@@ -204,13 +198,7 @@ export function startPolling(): void {
 // 수동 폴링 (디버그 모드)
 export async function manualPoll(): Promise<void> {
   console.log(chalk.cyan('\n  🔍 수동 폴링 실행...\n'));
-  const wasFirstPoll = isFirstPoll;
-  isFirstPoll = false; // 수동 폴링은 항상 조우 생성
-  try {
-    await processNewCommits(true);
-  } finally {
-    if (wasFirstPoll) isFirstPoll = wasFirstPoll;
-  }
+  await processNewCommits(true);
 }
 
 export function stopPolling(): void {

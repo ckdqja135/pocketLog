@@ -22,7 +22,7 @@ export async function showBanner(): Promise<void> {
   // 1) Ho-Oh 이미지 출력
   try {
     const response = await got(HO_OH_URL, { responseType: 'buffer' });
-    const imageWidth = Math.floor(termWidth * 0.4);
+    const imageWidth = Math.floor(termWidth * 0.5);
     const rendered = await terminalImage.buffer(response.body, { width: imageWidth });
     console.log(centerText(rendered, termWidth));
   } catch {

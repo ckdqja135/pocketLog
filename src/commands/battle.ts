@@ -21,6 +21,8 @@ import {
   publishTeamToGist,
   fetchOpponentTeam,
   teamDataToBattlePokemon,
+  getTypeEffectiveness,
+  getEffectivenessMessage,
   GistTeamData,
 } from '../services/battle.js';
 import {
@@ -283,10 +285,11 @@ async function challengeUser(): Promise<void> {
     name: 'myPokemonData',
     message: '배틀에 내보낼 포켓몬:',
     choices: available.slice(0, 20).map((p) => {
-      const hp = p.level * 5 + 20;
+      const hp = p.level * 5 + 20 + (p.bonus_hp || 0);
       const mp = p.level * 3 + 10;
+      const enhanceTag = (p.enhance_count || 0) > 0 ? chalk.magenta(` (+${p.enhance_count}강)`) : '';
       return {
-        name: `${chalk.hex(pokemonTypeColor(p.pokemon_id))(p.pokemon_name.padEnd(12))} Lv.${p.level.toString().padStart(2)}  HP:${hp}  MP:${mp}`,
+        name: `${chalk.hex(pokemonTypeColor(p.pokemon_id))(p.pokemon_name.padEnd(12))} Lv.${p.level.toString().padStart(2)}${enhanceTag}  HP:${hp}  MP:${mp}`,
         value: p,
       };
     }),
@@ -298,7 +301,10 @@ async function challengeUser(): Promise<void> {
     myPokemonData.pokemon_id,
     myPokemonData.pokemon_name,
     myPokemonData.pokemon_name,
-    myPokemonData.level
+    myPokemonData.level,
+    myPokemonData.bonus_hp || 0,
+    myPokemonData.bonus_atk || 0,
+    myPokemonData.bonus_def || 0,
   );
 
   const opponentTeamGist: GistTeamData = {
@@ -503,21 +509,25 @@ function executeSkill(attacker: BattlePokemonState, defender: BattlePokemonState
   attacker.mp -= skill.mpCost;
 
   if (skill.effect === 'damage') {
-    const dmg = calculateSkillDamage(attacker, skill, defender);
+    const { damage: dmg, effectiveness } = calculateSkillDamage(attacker, skill, defender);
     defender.hp = Math.max(0, defender.hp - dmg);
     console.log(chalk.green(`  ${skill.icon} ${attacker.koreanName}의 ${chalk.bold(skill.name)}! → ${defender.koreanName}에게 ${chalk.bold(String(dmg))} 데미지!`));
+    const effMsg = getEffectivenessMessage(effectiveness);
+    if (effMsg) console.log(effectiveness > 1 ? chalk.yellow(`  ${effMsg}`) : chalk.gray(`  ${effMsg}`));
   } else if (skill.effect === 'heal') {
     const heal = calculateHeal(attacker, skill);
     attacker.hp = Math.min(attacker.maxHp, attacker.hp + heal);
     console.log(chalk.green(`  ${skill.icon} ${attacker.koreanName}의 ${chalk.bold(skill.name)}! HP +${heal} 회복!`));
   } else if (skill.effect === 'drain') {
-    const dmg = calculateSkillDamage(attacker, skill, defender);
+    const { damage: dmg, effectiveness } = calculateSkillDamage(attacker, skill, defender);
     const heal = Math.floor(dmg * 0.5);
     defender.hp = Math.max(0, defender.hp - dmg);
     attacker.hp = Math.min(attacker.maxHp, attacker.hp + heal);
     console.log(chalk.green(`  ${skill.icon} ${attacker.koreanName}의 ${chalk.bold(skill.name)}! ${dmg} 데미지 + HP ${heal} 흡수!`));
+    const effMsg = getEffectivenessMessage(effectiveness);
+    if (effMsg) console.log(effectiveness > 1 ? chalk.yellow(`  ${effMsg}`) : chalk.gray(`  ${effMsg}`));
   } else if (skill.effect === 'burn') {
-    const dmg = calculateSkillDamage(attacker, skill, defender);
+    const { damage: dmg, effectiveness } = calculateSkillDamage(attacker, skill, defender);
     defender.hp = Math.max(0, defender.hp - dmg);
     if (!defender.isBurned && Math.random() < 0.4) {
       defender.isBurned = true;
@@ -525,6 +535,8 @@ function executeSkill(attacker: BattlePokemonState, defender: BattlePokemonState
     } else {
       console.log(chalk.green(`  ${skill.icon} ${attacker.koreanName}의 ${chalk.bold(skill.name)}! ${dmg} 데미지!`));
     }
+    const effMsg = getEffectivenessMessage(effectiveness);
+    if (effMsg) console.log(effectiveness > 1 ? chalk.yellow(`  ${effMsg}`) : chalk.gray(`  ${effMsg}`));
   } else if (skill.effect === 'paralyze') {
     if (!defender.isParalyzed && Math.random() < 0.5) {
       defender.isParalyzed = true;
@@ -540,21 +552,25 @@ function executeSkillEnemy(attacker: BattlePokemonState, defender: BattlePokemon
   attacker.mp -= skill.mpCost;
 
   if (skill.effect === 'damage') {
-    const dmg = calculateSkillDamage(attacker, skill, defender);
+    const { damage: dmg, effectiveness } = calculateSkillDamage(attacker, skill, defender);
     defender.hp = Math.max(0, defender.hp - dmg);
     console.log(chalk.red(`  ${skill.icon} ${attacker.koreanName}의 ${chalk.bold(skill.name)}! → ${defender.koreanName}에게 ${chalk.bold(String(dmg))} 데미지!`));
+    const effMsg = getEffectivenessMessage(effectiveness);
+    if (effMsg) console.log(effectiveness > 1 ? chalk.yellow(`  ${effMsg}`) : chalk.gray(`  ${effMsg}`));
   } else if (skill.effect === 'heal') {
     const heal = calculateHeal(attacker, skill);
     attacker.hp = Math.min(attacker.maxHp, attacker.hp + heal);
     console.log(chalk.red(`  ${skill.icon} ${attacker.koreanName}의 ${chalk.bold(skill.name)}! HP +${heal} 회복!`));
   } else if (skill.effect === 'drain') {
-    const dmg = calculateSkillDamage(attacker, skill, defender);
+    const { damage: dmg, effectiveness } = calculateSkillDamage(attacker, skill, defender);
     const heal = Math.floor(dmg * 0.5);
     defender.hp = Math.max(0, defender.hp - dmg);
     attacker.hp = Math.min(attacker.maxHp, attacker.hp + heal);
     console.log(chalk.red(`  ${skill.icon} ${attacker.koreanName}의 ${chalk.bold(skill.name)}! ${dmg} 데미지 + HP ${heal} 흡수!`));
+    const effMsg = getEffectivenessMessage(effectiveness);
+    if (effMsg) console.log(effectiveness > 1 ? chalk.yellow(`  ${effMsg}`) : chalk.gray(`  ${effMsg}`));
   } else if (skill.effect === 'burn') {
-    const dmg = calculateSkillDamage(attacker, skill, defender);
+    const { damage: dmg, effectiveness } = calculateSkillDamage(attacker, skill, defender);
     defender.hp = Math.max(0, defender.hp - dmg);
     if (!defender.isBurned && Math.random() < 0.4) {
       defender.isBurned = true;
@@ -562,6 +578,8 @@ function executeSkillEnemy(attacker: BattlePokemonState, defender: BattlePokemon
     } else {
       console.log(chalk.red(`  ${skill.icon} ${attacker.koreanName}의 ${chalk.bold(skill.name)}! ${dmg} 데미지!`));
     }
+    const effMsg = getEffectivenessMessage(effectiveness);
+    if (effMsg) console.log(effectiveness > 1 ? chalk.yellow(`  ${effMsg}`) : chalk.gray(`  ${effMsg}`));
   } else if (skill.effect === 'paralyze') {
     if (!defender.isParalyzed && Math.random() < 0.5) {
       defender.isParalyzed = true;

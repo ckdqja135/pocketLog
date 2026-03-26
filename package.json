@@ -27,6 +27,7 @@
     "got": "^14.6.6",
     "inquirer": "^8.2.6",
     "node-cron": "^3.0.3",
+    "sharp": "^0.34.5",
     "terminal-image": "^2.0.0"
   },
   "devDependencies": {

@@ -1,13 +1,61 @@
 import chalk from 'chalk';
-import terminalImage from 'terminal-image';
 import got from 'got';
+import sharp from 'sharp';
+
+const PIXEL = '\u2584';
+
+async function renderImage(buffer: Buffer, targetWidth: number): Promise<string> {
+  // sharp Lanczos3로 고품질 리사이즈
+  const meta = await sharp(buffer).metadata();
+  const origW = meta.width || 475;
+  const origH = meta.height || 475;
+  const ratio = origW / origH;
+  const width = targetWidth;
+  const height = Math.round(width / ratio);
+  // 짝수로 맞춤 (반블록 렌더링)
+  const finalHeight = height % 2 === 0 ? height : height + 1;
+
+  const { data, info } = await sharp(buffer)
+    .resize(width, finalHeight, { kernel: sharp.kernel.lanczos3 })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const channels = info.channels; // 4 (RGBA)
+
+  let result = '';
+  for (let y = 0; y < finalHeight - 1; y += 2) {
+    for (let x = 0; x < width; x++) {
+      const topIdx = (y * width + x) * channels;
+      const bottomIdx = ((y + 1) * width + x) * channels;
+
+      const tr = data[topIdx], tg = data[topIdx + 1], tb = data[topIdx + 2], ta = data[topIdx + 3];
+      const br = data[bottomIdx], bg = data[bottomIdx + 1], bb = data[bottomIdx + 2], ba = data[bottomIdx + 3];
+
+      const topVisible = ta > 180;
+      const bottomVisible = ba > 180;
+
+      if (!topVisible && !bottomVisible) {
+        result += ' ';
+      } else if (!topVisible) {
+        result += chalk.rgb(br, bg, bb)(PIXEL);
+      } else if (!bottomVisible) {
+        result += chalk.bgRgb(tr, tg, tb)(' ');
+      } else {
+        result += chalk.bgRgb(tr, tg, tb).rgb(br, bg, bb)(PIXEL);
+      }
+    }
+    result += '\n';
+  }
+  return result;
+}
 
 export async function showPokemonImage(spriteUrl: string): Promise<void> {
   try {
     const response = await got(spriteUrl, { responseType: 'buffer' });
     const termWidth = process.stdout.columns || 80;
-    const imageWidth = Math.floor(termWidth * 0.3);
-    const rendered = await terminalImage.buffer(response.body, { width: imageWidth });
+    const imageWidth = Math.floor(termWidth * 0.45);
+    const rendered = await renderImage(response.body, imageWidth);
     console.log(rendered);
   } catch {
     // 이미지 출력 실패 시 무시

@@ -9,7 +9,7 @@ import {
   getCommitStreak,
   getStreakBonus,
 } from '../services/database.js';
-import { attemptCatch, getCatchRate, getAvailableBalls } from '../services/pokemon.js';
+import { attemptCatch, getCatchRate, getAvailableBalls, getPokemonInfo, formatTypes } from '../services/pokemon.js';
 import { showPokemonImage } from '../ui/display.js';
 import { encounterCommand } from './encounter.js';
 import { checkBadges } from './badges.js';
@@ -36,7 +36,11 @@ export async function catchCommand(): Promise<void> {
   const spriteUrl = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${encounter.pokemon_id}.png`;
   await showPokemonImage(spriteUrl);
 
+  const pokemonInfo = await getPokemonInfo(encounter.pokemon_id);
+  const typeTag = formatTypes(pokemonInfo.types);
+
   console.log(chalk.yellow(`\n  야생의 ${chalk.bold(encounter.pokemon_name)} Lv.${encounter.level} 에게`));
+  if (typeTag) console.log(chalk.gray(`  타입: ${typeTag}`));
 
   // 연속 커밋 보너스 표시
   const streak = getCommitStreak();

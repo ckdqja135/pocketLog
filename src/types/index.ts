@@ -25,6 +25,10 @@ export interface CaughtPokemon {
   commit_sha: string;
   rarity: string;
   experience: number;
+  bonus_hp: number;
+  bonus_atk: number;
+  bonus_def: number;
+  enhance_count: number;
 }
 
 export interface PokemonInfo {
@@ -33,6 +37,7 @@ export interface PokemonInfo {
   koreanName: string;
   spriteUrl: string;
   rarity: Rarity;
+  types: string[]; // e.g. ['불꽃', '비행']
   evolutionChainId?: number;
   evolvesTo?: number; // 진화 후 pokemon_id
 }
@@ -121,7 +126,8 @@ export interface AdventureConfig {
 export type PokemonType =
   | 'fire' | 'water' | 'grass' | 'electric' | 'ice'
   | 'fighting' | 'poison' | 'ground' | 'flying' | 'psychic'
-  | 'bug' | 'rock' | 'ghost' | 'dragon' | 'dark' | 'normal';
+  | 'bug' | 'rock' | 'ghost' | 'dragon' | 'dark' | 'normal'
+  | 'steel' | 'fairy';
 
 export type SkillEffect = 'damage' | 'heal' | 'drain' | 'burn' | 'paralyze';
 
@@ -141,10 +147,13 @@ export interface BattlePokemonState {
   name: string;
   koreanName: string;
   level: number;
+  types: PokemonType[];
   maxHp: number;
   hp: number;
   maxMp: number;
   mp: number;
+  bonusAtk: number;
+  bonusDef: number;
   skills: Skill[];
   isDefending: boolean;
   isBurned: boolean;

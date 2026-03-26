@@ -110,6 +110,18 @@ function initTables(): void {
   try {
     database.exec(`ALTER TABLE caught_pokemon ADD COLUMN experience INTEGER DEFAULT 0`);
   } catch { /* 이미 존재 */ }
+  try {
+    database.exec(`ALTER TABLE caught_pokemon ADD COLUMN bonus_hp INTEGER DEFAULT 0`);
+  } catch { /* 이미 존재 */ }
+  try {
+    database.exec(`ALTER TABLE caught_pokemon ADD COLUMN bonus_atk INTEGER DEFAULT 0`);
+  } catch { /* 이미 존재 */ }
+  try {
+    database.exec(`ALTER TABLE caught_pokemon ADD COLUMN bonus_def INTEGER DEFAULT 0`);
+  } catch { /* 이미 존재 */ }
+  try {
+    database.exec(`ALTER TABLE caught_pokemon ADD COLUMN enhance_count INTEGER DEFAULT 0`);
+  } catch { /* 이미 존재 */ }
 
   // 스태미나 초기값 설정
   database.prepare('INSERT OR IGNORE INTO trainer_stats (key, value) VALUES (?, ?)').run('stamina', 5);
@@ -367,6 +379,39 @@ export function addExperience(caughtPokemonId: number, exp: number): { leveled: 
   getDb().prepare('UPDATE caught_pokemon SET experience = ?, level = ? WHERE id = ?').run(remaining, newLevel, caughtPokemonId);
 
   return { leveled: newLevel > pokemon.level, newLevel, totalExp: remaining };
+}
+
+export function addLevels(caughtPokemonId: number, levels: number): number {
+  const pokemon = getCaughtPokemonById(caughtPokemonId);
+  if (!pokemon) return 0;
+  const newLevel = Math.min(100, pokemon.level + levels);
+  getDb().prepare('UPDATE caught_pokemon SET level = ? WHERE id = ?').run(newLevel, caughtPokemonId);
+  return newLevel;
+}
+
+export interface EnhanceResult {
+  newLevel: number;
+  bonusHp: number;
+  bonusAtk: number;
+  bonusDef: number;
+  enhanceCount: number;
+}
+
+export function enhancePokemon(caughtPokemonId: number, levels: number): EnhanceResult | null {
+  const pokemon = getCaughtPokemonById(caughtPokemonId);
+  if (!pokemon) return null;
+
+  const newLevel = Math.min(100, pokemon.level + levels);
+  const bonusHp = (pokemon.bonus_hp || 0) + 10;
+  const bonusAtk = (pokemon.bonus_atk || 0) + 3;
+  const bonusDef = (pokemon.bonus_def || 0) + 2;
+  const enhanceCount = (pokemon.enhance_count || 0) + 1;
+
+  getDb().prepare(
+    'UPDATE caught_pokemon SET level = ?, bonus_hp = ?, bonus_atk = ?, bonus_def = ?, enhance_count = ? WHERE id = ?'
+  ).run(newLevel, bonusHp, bonusAtk, bonusDef, enhanceCount, caughtPokemonId);
+
+  return { newLevel, bonusHp, bonusAtk, bonusDef, enhanceCount };
 }
 
 // --- 모험 관련 ---
