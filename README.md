@@ -20,7 +20,7 @@ npm run build
 npm start
 ```
 
-개발 모드:
+개발 모드
 ```bash
 npm run dev
 ```
@@ -203,7 +203,7 @@ CREATE TABLE leaderboard (
 );
 ```
 
-3. pokelog에서 연결:
+3. pokelog에서 연결
 ```
 pokelog> online
 ? Supabase URL: https://xxxxx.supabase.co
