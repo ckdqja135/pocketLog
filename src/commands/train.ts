@@ -10,6 +10,7 @@ import {
 } from '../services/database.js';
 import { getEvolution } from '../services/pokemon.js';
 import { pokemonTypeColor } from '../ui/display.js';
+import { selectPokemonWithSearch } from '../ui/pokemon-select.js';
 
 const TRAINING_TYPES: TrainingType[] = [
   { name: '기본 훈련', icon: '💪', expGain: 5, staminaCost: 0 },
@@ -37,22 +38,17 @@ export async function trainCommand(): Promise<void> {
     return;
   }
 
-  const { selected } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'selected',
-      message: '어떤 포켓몬을 훈련시킬까요?',
-      choices: availablePokemon.slice(0, 20).map((p) => {
-        const exp = p.experience || 0;
-        const needed = p.level * 10;
-        const bar = createExpBar(exp, needed);
-        return {
-          name: `${chalk.hex(pokemonTypeColor(p.pokemon_id))(p.pokemon_name.padEnd(12))} Lv.${p.level.toString().padStart(2)} ${bar} (${exp}/${needed})`,
-          value: p,
-        };
-      }),
+  const selected = await selectPokemonWithSearch(
+    availablePokemon,
+    '어떤 포켓몬을 훈련시킬까요?',
+    (p) => {
+      const exp = p.experience || 0;
+      const needed = p.level * 10;
+      const bar = createExpBar(exp, needed);
+      return `${chalk.hex(pokemonTypeColor(p.pokemon_id))(p.pokemon_name.padEnd(12))} Lv.${p.level.toString().padStart(2)} ${bar} (${exp}/${needed})`;
     },
-  ]);
+  );
+  if (!selected) return;
 
   if (selected.level >= 100) {
     console.log(chalk.yellow(`  ${selected.pokemon_name}은(는) 이미 최대 레벨입니다!`));
@@ -67,12 +63,16 @@ export async function trainCommand(): Promise<void> {
       type: 'list',
       name: 'training',
       message: '훈련 유형을 선택하세요:',
-      choices: availableTraining.map((t) => ({
-        name: `${t.icon} ${t.name}  (EXP +${t.expGain}${t.staminaCost > 0 ? `, 스태미나 -${t.staminaCost}` : ', 무료'})`,
-        value: t,
-      })),
+      choices: [
+        ...availableTraining.map((t) => ({
+          name: `${t.icon} ${t.name}  (EXP +${t.expGain}${t.staminaCost > 0 ? `, 스태미나 -${t.staminaCost}` : ', 무료'})`,
+          value: t as TrainingType | null,
+        })),
+        { name: chalk.gray('← 돌아가기'), value: null as TrainingType | null },
+      ],
     },
   ]);
+  if (!training) return;
 
   // 스태미나 소모
   if (training.staminaCost > 0) {

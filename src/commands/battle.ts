@@ -35,6 +35,7 @@ import {
   syncLeaderboard,
 } from '../services/supabase.js';
 import { pokemonTypeColor } from '../ui/display.js';
+import { selectPokemonWithSearch } from '../ui/pokemon-select.js';
 
 const BATTLE_COOLDOWN_MS = 5 * 60 * 1000;
 
@@ -91,21 +92,13 @@ async function setupTeam(): Promise<void> {
     const remaining = available.filter((p) => !selected.find((s) => s.id === p.id));
     if (remaining.length === 0) break;
 
-    const choices = remaining.slice(0, 20).map((p) => ({
-      name: `${chalk.hex(pokemonTypeColor(p.pokemon_id))(p.pokemon_name.padEnd(12))} Lv.${p.level.toString().padStart(2)}`,
-      value: p,
-    }));
-
-    if (i > 0) {
-      choices.push({ name: chalk.gray('선택 완료'), value: null as any });
-    }
-
-    const { pick } = await inquirer.prompt([{
-      type: 'list',
-      name: 'pick',
-      message: `${i + 1}번째 포켓몬:`,
-      choices,
-    }]);
+    const backLabel = i === 0 ? '← 돌아가기' : '✅ 선택 완료';
+    const pick = await selectPokemonWithSearch(
+      remaining,
+      `${i + 1}번째 포켓몬:`,
+      (p) => `${chalk.hex(pokemonTypeColor(p.pokemon_id))(p.pokemon_name.padEnd(12))} Lv.${p.level.toString().padStart(2)}`,
+      backLabel,
+    );
 
     if (!pick) break;
     selected.push(pick);
@@ -280,20 +273,17 @@ async function challengeUser(): Promise<void> {
     return;
   }
 
-  const { myPokemonData } = await inquirer.prompt([{
-    type: 'list',
-    name: 'myPokemonData',
-    message: '배틀에 내보낼 포켓몬:',
-    choices: available.slice(0, 20).map((p) => {
+  const myPokemonData = await selectPokemonWithSearch(
+    available,
+    '배틀에 내보낼 포켓몬:',
+    (p) => {
       const hp = p.level * 5 + 20 + (p.bonus_hp || 0);
       const mp = p.level * 3 + 10;
       const enhanceTag = (p.enhance_count || 0) > 0 ? chalk.magenta(` (+${p.enhance_count}강)`) : '';
-      return {
-        name: `${chalk.hex(pokemonTypeColor(p.pokemon_id))(p.pokemon_name.padEnd(12))} Lv.${p.level.toString().padStart(2)}${enhanceTag}  HP:${hp}  MP:${mp}`,
-        value: p,
-      };
-    }),
-  }]);
+      return `${chalk.hex(pokemonTypeColor(p.pokemon_id))(p.pokemon_name.padEnd(12))} Lv.${p.level.toString().padStart(2)}${enhanceTag}  HP:${hp}  MP:${mp}`;
+    },
+  );
+  if (!myPokemonData) return;
 
   // 기술 로딩
   console.log(chalk.cyan('  기술 데이터 로딩 중...\n'));

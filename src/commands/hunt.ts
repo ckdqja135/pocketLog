@@ -96,12 +96,16 @@ export async function huntCommand(): Promise<void> {
       type: 'list',
       name: 'zone',
       message: '어디로 사냥을 떠날까요?',
-      choices: availableZones.map((z) => ({
-        name: `${z.icon} ${z.name}  (스태미나 ${z.staminaCost} 소모) - 희귀 확률: ${z.rarityWeights.rare + z.rarityWeights.legendary + z.rarityWeights.mythical}%`,
-        value: z,
-      })),
+      choices: [
+        ...availableZones.map((z) => ({
+          name: `${z.icon} ${z.name}  (스태미나 ${z.staminaCost} 소모) - 희귀 확률: ${z.rarityWeights.rare + z.rarityWeights.legendary + z.rarityWeights.mythical}%`,
+          value: z as HuntZone | null,
+        })),
+        { name: chalk.gray('← 돌아가기'), value: null as HuntZone | null },
+      ],
     },
   ]);
+  if (!zone) return;
 
   // 스태미나 소모
   const success = useStamina(zone.staminaCost);

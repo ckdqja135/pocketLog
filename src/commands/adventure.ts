@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 import { AdventureConfig } from '../types/index.js';
+import { selectPokemonWithSearch } from '../ui/pokemon-select.js';
 import {
   getAllCaughtPokemon,
   getActiveAdventure,
@@ -109,17 +110,12 @@ export async function adventureCommand(): Promise<void> {
   }
 
   // 포켓몬 선택
-  const { selected } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'selected',
-      message: '어떤 포켓몬을 모험에 보낼까요?',
-      choices: availablePokemon.slice(0, 20).map((p) => ({
-        name: `${chalk.hex(pokemonTypeColor(p.pokemon_id))(p.pokemon_name.padEnd(12))} Lv.${p.level.toString().padStart(2)}`,
-        value: p,
-      })),
-    },
-  ]);
+  const selected = await selectPokemonWithSearch(
+    availablePokemon,
+    '어떤 포켓몬을 모험에 보낼까요?',
+    (p) => `${chalk.hex(pokemonTypeColor(p.pokemon_id))(p.pokemon_name.padEnd(12))} Lv.${p.level.toString().padStart(2)}`,
+  );
+  if (!selected) return;
 
   // 모험 유형 선택
   const { config } = await inquirer.prompt([
@@ -127,12 +123,16 @@ export async function adventureCommand(): Promise<void> {
       type: 'list',
       name: 'config',
       message: '모험 유형을 선택하세요:',
-      choices: ADVENTURE_CONFIGS.map((c) => ({
-        name: `${c.icon} ${c.name}  (${c.durationMinutes}분, EXP ${c.expReward[0]}~${c.expReward[1]}${c.pokemonChance > 0 ? `, 포켓몬 발견 ${Math.round(c.pokemonChance * 100)}%` : ''})`,
-        value: c,
-      })),
+      choices: [
+        ...ADVENTURE_CONFIGS.map((c) => ({
+          name: `${c.icon} ${c.name}  (${c.durationMinutes}분, EXP ${c.expReward[0]}~${c.expReward[1]}${c.pokemonChance > 0 ? `, 포켓몬 발견 ${Math.round(c.pokemonChance * 100)}%` : ''})`,
+          value: c as AdventureConfig | null,
+        })),
+        { name: chalk.gray('← 돌아가기'), value: null as AdventureConfig | null },
+      ],
     },
   ]);
+  if (!config) return;
 
   // 보상 미리 계산
   const rewardExp = randomBetween(config.expReward[0], config.expReward[1]);
